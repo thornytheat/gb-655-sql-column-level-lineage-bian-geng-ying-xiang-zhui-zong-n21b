@@ -12,8 +12,8 @@ router = APIRouter()
 
 
 @router.get("/", response_class=HTMLResponse)
-def index(request: Request):
-    run = store.latest_run()
+def index(request: Request, run_id: str | None = None):
+    run = web.pick_run(run_id)
     rows = (run or {}).get("diff") or []
     ledger = (run or {}).get("ledger") or {}
     quarantine = (run or {}).get("quarantine") or []
@@ -23,6 +23,7 @@ def index(request: Request):
         "index.html",
         "index",
         run,
+        run_id=run_id,
         rows=rows,
         counts=ledger.get("counts") or {},
         quarantine=quarantine,

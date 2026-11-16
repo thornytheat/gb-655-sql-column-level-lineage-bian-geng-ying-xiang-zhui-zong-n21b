@@ -18,7 +18,7 @@
       <thead>
         <tr>
           <th>批次</th><th class="num">序号</th><th>版本</th><th>生效起</th>
-          <th class="num">字段</th><th class="num">破坏</th><th class="num">断链</th><th>账</th><th>生成</th>
+          <th class="num">字段</th><th class="num">破坏</th><th class="num">断链</th><th>账</th><th>生成</th><th>回看</th>
         </tr>
       </thead>
       <tbody>
@@ -33,6 +33,7 @@
           <td class="num">{{ item.refs_broken }}</td>
           <td>{% if item.balanced %}<span class="st st-ok">平</span>{% else %}<span class="st st-bad">不平</span>{% endif %}</td>
           <td class="name">{{ item.created_at|day }}</td>
+          <td class="name"><a href="/impact?run_id={{ item.run_id }}">影响面</a> · <a href="/spec?run_id={{ item.run_id }}">迁移单</a></td>
         </tr>
         {% endfor %}
       </tbody>
@@ -90,6 +91,7 @@
   <ol class="footnotes">
     <li>同输入重跑命中批次键，不新增行。<a class="back" href="#main">↩</a></li>
     <li>区间左闭右开，相邻区间不重叠。<a class="back" href="#main">↩</a></li>
+    <li>回看链接把影响面、迁移单与导出钉在对应批次。<a class="back" href="#main">↩</a></li>
   </ol>
 </aside>
 {% endblock %}

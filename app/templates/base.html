@@ -20,7 +20,7 @@
   </dl>
   <nav class="toc" aria-label="页面">
     {% for item in nav %}
-    <a href="{{ item.href }}"{% if item.slug == active %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a>
+    <a href="{{ item.href }}{{ run_qs }}"{% if item.slug == active %} class="is-current" aria-current="page"{% endif %}>{{ item.label }}</a>
     {% endfor %}
   </nav>
 </header>

@@ -88,6 +88,62 @@ def test_refs_csv_marks_broken(run):
     assert len(aliased) == expected.REFS_ALIASED
 
 
+def test_refs_csv_carries_alias_path(run):
+    rows = _rows(migration.refs_csv_text(run))
+    by_ref = {(row["consumer"], row["ref"]): row for row in rows}
+    chained = by_ref[("dw.mv_order_stat", "dim_order.ord_no")]
+    assert chained["via"] == "alias"
+    assert chained["alias_path"] == "ord_no>order_no>order_code"
+    direct = by_ref[("dw.mv_order_daily", "dim_order.order_id")]
+    assert direct["via"] == "direct"
+    assert direct["alias_path"] == ""
+
+
+EXPORT_ROUTES = [
+    ("/api/export/evidence.csv", "text/csv"),
+    ("/api/export/spec.md", "text/markdown"),
+    ("/api/export/fields.csv", "text/csv"),
+    ("/api/export/refs.csv", "text/csv"),
+    ("/api/export/ledger.csv", "text/csv"),
+    ("/api/export/manifest.json", "application/json"),
+]
+
+
+def test_export_routes_exist(client):
+    run_id = client.get("/api/health").json()["run_id"]
+    for path, media in EXPORT_ROUTES:
+        response = client.get(path)
+        assert response.status_code == 200, path
+        assert response.headers["content-type"].startswith(media), path
+        assert run_id in response.headers["content-disposition"], path
+
+
+def test_exports_follow_run_id(client):
+    first = client.get("/api/health").json()["run_id"]
+    client.post("/api/runs", json={"params": {"wave": "second"}})
+    second = client.get("/api/health").json()["run_id"]
+    assert second != first
+
+    manifest = client.get(f"/api/export/manifest.json?run_id={first}")
+    assert manifest.status_code == 200
+    assert manifest.json()["run_id"] == first
+    assert first in manifest.headers["content-disposition"]
+
+    # 不指定 run_id 时取最新批次
+    assert client.get("/api/export/manifest.json").json()["run_id"] == second
+
+    # 引用账回看同一版本：行数与该批次登记引用一致
+    rows = _rows(client.get(f"/api/export/refs.csv?run_id={first}").text)
+    assert len(rows) == expected.REFS_TOTAL
+
+
+def test_exports_unknown_run_id_404(client):
+    for path, _media in EXPORT_ROUTES:
+        response = client.get(f"{path}?run_id=fm-000000000000")
+        assert response.status_code == 404, path
+        assert response.json()["error"] == "NOT_FOUND"
+
+
 def test_ledger_csv_values(run):
     rows = _pairs(migration.ledger_csv_text(run))
     assert rows["old_total"] == "13"

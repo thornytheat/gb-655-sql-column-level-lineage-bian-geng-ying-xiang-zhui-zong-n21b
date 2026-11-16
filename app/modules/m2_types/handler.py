@@ -5,21 +5,22 @@ from __future__ import annotations
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse
 
-from app import errors, store, web
+from app import errors, web
 from app.modules.m2_types import service
 
 router = APIRouter()
 
 
 @router.get("/types", response_class=HTMLResponse)
-def types_page(request: Request):
-    run = store.latest_run()
+def types_page(request: Request, run_id: str | None = None):
+    run = web.pick_run(run_id)
     rows = (run or {}).get("diff") or []
     return web.page_or_404(
         request,
         "types.html",
         "types",
         run,
+        run_id=run_id,
         grid=service.grid(),
         rows=rows,
         changes=(run or {}).get("changes") or {},

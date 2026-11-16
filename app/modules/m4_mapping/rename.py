@@ -79,3 +79,48 @@ def alias_map(fields_old: list[dict], fields_new: list[dict]) -> dict[tuple[str,
             continue
         out[(old["table"].lower(), old["name"].lower())] = new["name"]
     return out
+
+
+def chain_paths(hops: list[dict]) -> list[dict]:
+    """把逐跳改名记录连成最长链，供页面与导出展示。
+
+    hops 里每条是 {"table", "old_name", "new_name", ...}；同一字段跨多个版本
+    改过多次名时，这里把散落的跳接成 ord_no → order_no → order_code，
+    并带上首跳与末跳所在的版本区间。
+    """
+    by_table: dict[str, dict[str, str]] = {}
+    versions: dict[tuple[str, str], dict] = {}
+    for hop in hops:
+        table = str(hop.get("table") or "")
+        old_name = str(hop.get("old_name") or "")
+        new_name = str(hop.get("new_name") or "")
+        if not table or not old_name or not new_name or old_name == new_name:
+            continue
+        by_table.setdefault(table, {})[old_name] = new_name
+        versions[(table, old_name)] = hop
+
+    paths: list[dict] = []
+    for table in sorted(by_table):
+        edges = by_table[table]
+        starts = [name for name in edges if name not in edges.values()]
+        for start in sorted(starts, key=str.lower):
+            path = [start]
+            seen = {start.lower()}
+            node = start
+            while node in edges:
+                nxt = edges[node]
+                path.append(nxt)
+                if nxt.lower() in seen:
+                    break
+                seen.add(nxt.lower())
+                node = nxt
+            if len(path) > 1:
+                first = versions.get((table, path[0])) or {}
+                last = versions.get((table, path[-2])) or {}
+                paths.append({
+                    "table": table,
+                    "path": path,
+                    "from_version": first.get("from_version"),
+                    "to_version": last.get("to_version"),
+                })
+    return paths

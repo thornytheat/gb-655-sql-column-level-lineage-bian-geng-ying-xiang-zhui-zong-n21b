@@ -17,14 +17,15 @@ ALLOWED_KEYS = {
 
 
 @router.get("/batches", response_class=HTMLResponse)
-def batches_page(request: Request):
-    run = store.latest_run()
+def batches_page(request: Request, run_id: str | None = None):
+    run = web.pick_run(run_id)
     runs = history.listing()
     return web.page_or_404(
         request,
         "batches.html",
         "batches",
         run,
+        run_id=run_id,
         runs=runs,
         ledger=(run or {}).get("ledger") or {},
         reconcile=history.reconcile(run) if run else {},
@@ -74,8 +75,8 @@ def batches_api():
 
 
 @router.get("/api/reconcile")
-def reconcile_api():
-    run = store.latest_run()
+def reconcile_api(run_id: str | None = None):
+    run = web.pick_run(run_id)
     if not run:
         raise errors.NotFound("还没有批次，先在版本历史页跑一次")
     return history.reconcile(run)

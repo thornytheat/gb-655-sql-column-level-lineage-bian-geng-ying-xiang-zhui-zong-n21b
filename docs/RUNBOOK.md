@@ -20,9 +20,9 @@ docker compose exec -T app python -m pytest -q
 
 1. 打开 `http://localhost:18214/`，看规格单的字段清单与采信诊断。
 2. `/types` 比较两个类型写法，看读者 / 写者两向结论。
-3. `/mapping` 看旧名到新名、别名 SQL、冲突项。
-4. `/impact` 看受影响节点、环、断链、单边登记。
-5. `/batches` 点「跑一次」，再点「陈旧提交」验证 409。
+3. `/mapping` 看旧名到新名、改名链、别名 SQL、冲突项。
+4. `/impact` 看受影响节点、环、断链、单边登记与经别名读取。
+5. `/batches` 点「跑一次」，再点「陈旧提交」验证 409；每行的「回看」把影响面与迁移单钉在那一批。
 6. `/spec` 导出迁移单与三份账目 CSV。
 
 ## 4 重建数据库
@@ -56,6 +56,8 @@ docker compose up -d --build
 | GET | `/api/export/ledger.csv` | 账目 CSV |
 | GET | `/api/export/manifest.json` | 运行清单 |
 
+页面与上述导出都接受 `?run_id=fm-…` 回看指定批次，缺省取最新批次；导出文件名带 run_id，页面与导出始终对应同一版本。未知 run_id 一律 404。
+
 ## 6 失败处置
 
 | 现象 | 原因 | 处置 |
@@ -63,7 +65,8 @@ docker compose up -d --build
 | 409 `VERSION_STALE` | 提交带的基线序号落后 | 去掉 `base_version_seq` 或填当前序号 |
 | 400 `WINDOW_INVERTED` | 生效区间起点不早于终点 | 检查 `effective_from` / `effective_to` |
 | 400 `BAD_INPUT` | 文件名、参数或 JSON 结构不对 | 看返回的 `detail` |
-| 404 `NOT_FOUND` | 还没跑过批次 | 先在 `/batches` 点「跑一次」 |
+| 404 `NOT_FOUND` | 还没跑过批次，或 `run_id` 不存在 | 先在 `/batches` 点「跑一次」，或核对批次号 |
+| 跑到一半失败 | 输入或判定中途出错 | 批次不落库；修好直接重跑，同批键命中不新增 |
 
 ## 7 端口与并发
 

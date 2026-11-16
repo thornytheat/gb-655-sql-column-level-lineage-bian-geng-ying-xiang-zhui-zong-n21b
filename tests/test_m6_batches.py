@@ -28,6 +28,48 @@ def test_idempotent_rerun_reuses_run(client):
     assert again["ledger"]["counts"] == first["ledger"]["counts"]
 
 
+def test_failed_run_leaves_no_row_and_resumes(client, monkeypatch):
+    """失败后可续跑：中途抛错不落批次，修好再跑同批正常入库，重跑仍命中。"""
+    from app.modules.m5_impact import service as impact_service
+
+    real_build = impact_service.build
+
+    def boom(*args, **kwargs):
+        raise RuntimeError("impact exploded")
+
+    monkeypatch.setattr(impact_service, "build", boom)
+    with pytest.raises(RuntimeError):
+        batch_service.execute(params={"wave": "flaky"})
+    assert store.count_runs() == 1
+
+    # 只恢复被打补丁的函数；undo() 会把 client 夹具的环境变量一起撤掉
+    monkeypatch.setattr(impact_service, "build", real_build)
+    run = batch_service.execute(params={"wave": "flaky"})
+    assert store.count_runs() == 2
+    again = batch_service.execute(params={"wave": "flaky"})
+    assert again["reused"] is True
+    assert again["run_id"] == run["run_id"]
+    assert store.count_runs() == 2
+
+
+def test_duplicate_save_race_reuses_existing(client, monkeypatch):
+    """同批并发：唯一键挡住重复写入，后到者复用已存结果而不是报错。"""
+    real_find = store.find_run_by_key
+    calls = {"n": 0}
+
+    def miss_first(key):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            return None
+        return real_find(key)
+
+    monkeypatch.setattr(store, "find_run_by_key", miss_first)
+    run = batch_service.execute()
+    assert run["reused"] is True
+    assert run["run_id"] == store.latest_run()["run_id"]
+    assert store.count_runs() == 1
+
+
 def test_trap26_stale_submission_rejected(client):
     """TRAP-26：基线落后于当前版本号的提交必须被拒，不能覆盖新结果。"""
     response = client.post("/api/runs", json={"base_version_seq": 0})

@@ -136,6 +136,7 @@ def resolve_refs(consumers: list[dict], fields_old: list[dict],
             field = None
             via = "direct"
             detail = ""
+            alias_path: list[str] = []
             old_field = old_index.get(key)
             if old_field is not None:
                 target = new_by_id.get(old_field["field_id"])
@@ -149,6 +150,7 @@ def resolve_refs(consumers: list[dict], fields_old: list[dict],
                             and chain["canonical"].lower() == target["name"].lower()):
                         field = target
                         via = "alias"
+                        alias_path = list(chain["path"])
                     else:
                         via = "unsafe_alias"
                         detail = "改名同时换类型，别名不安全"
@@ -164,6 +166,7 @@ def resolve_refs(consumers: list[dict], fields_old: list[dict],
                 if target is not None:
                     field = target
                     via = "cycle" if chain["cycle"] else "alias"
+                    alias_path = list(chain["path"])
                 else:
                     via = "unknown_name"
                     detail = "旧版本里没有这个名字"
@@ -177,6 +180,7 @@ def resolve_refs(consumers: list[dict], fields_old: list[dict],
                 "via": via,
                 "field_id": field["field_id"] if field else None,
                 "new_name": field["name"] if field else None,
+                "alias_path": alias_path,
                 "detail": detail,
             }
             if field is None:

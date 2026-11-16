@@ -12,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app import config, reasons, store
+from app import config, errors, reasons, store
 
 TEMPLATE_DIR = Path(__file__).resolve().parent / "templates"
 templates = Jinja2Templates(directory=str(TEMPLATE_DIR))
@@ -25,6 +25,18 @@ NAV = [
     {"slug": "batches", "href": "/batches", "label": "版本历史"},
     {"slug": "spec", "href": "/spec", "label": "迁移单"},
 ]
+
+_UNSET = object()
+
+
+def pick_run(run_id: str | None) -> dict | None:
+    """指定 run_id 时取那一批（不存在 → 404），否则取最新批次。"""
+    if run_id:
+        run = store.run_by_id(run_id)
+        if run is None:
+            raise errors.NotFound("批次不存在", detail={"run_id": run_id})
+        return run
+    return store.latest_run()
 
 
 def _ts(value: str | None) -> str:
@@ -81,8 +93,9 @@ templates.env.filters["day"] = _day
 templates.env.filters["via"] = _via
 
 
-def shell_context(active: str) -> dict:
-    run = store.latest_run()
+def shell_context(active: str, run=_UNSET) -> dict:
+    if run is _UNSET:
+        run = store.latest_run()
     created = (run or {}).get("created_at")
     return {
         "active": active,
@@ -106,10 +119,14 @@ def render(request: Request, template: str, active: str, **extra) -> HTMLRespons
 
 
 def page_or_404(request: Request, template: str, active: str, run: dict | None,
-                **extra) -> HTMLResponse:
-    """没有批次时给出空态，页面仍返回 200。"""
-    context = shell_context(active)
+                run_id: str | None = None, **extra) -> HTMLResponse:
+    """没有批次时给出空态，页面仍返回 200。
+
+    run_id 非空表示在回看指定批次：页头、导航与导出链接都钉在这一版上。
+    """
+    context = shell_context(active, run)
     context["request"] = request
     context["empty"] = run is None
+    context["run_qs"] = f"?run_id={run_id}" if run_id else ""
     context.update(extra)
     return templates.TemplateResponse(request, template, context)

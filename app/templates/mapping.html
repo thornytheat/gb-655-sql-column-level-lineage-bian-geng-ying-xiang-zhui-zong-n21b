@@ -35,7 +35,28 @@
 </section>
 
 <section class="doc-section">
-  <h2><span class="clause">2</span>别名 SQL</h2>
+  <h2><span class="clause">2</span>改名链</h2>
+  {% if chain_paths %}
+  <table>
+    <caption>跨版本别名路径<sup class="fn">2</sup></caption>
+    <thead><tr><th>表</th><th>路径</th><th>区间</th></tr></thead>
+    <tbody>
+      {% for item in chain_paths %}
+      <tr>
+        <td class="name">{{ item.table }}</td>
+        <td class="name">{{ item.path|join(' → ') }}</td>
+        <td class="name">{{ item.from_version or '—' }} → {{ item.to_version or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有改名。</p>
+  {% endif %}
+</section>
+
+<section class="doc-section">
+  <h2><span class="clause">3</span>别名 SQL</h2>
   {% if aliases %}
   <pre>{% for item in aliases %}{{ item.sql }}  -- {{ item.table }}
 {% endfor %}</pre>
@@ -45,7 +66,7 @@
 </section>
 
 <section class="doc-section">
-  <h2><span class="clause">3</span>冲突与增减</h2>
+  <h2><span class="clause">4</span>冲突与增减</h2>
   <div class="split">
     <div>
       <h3>冲突</h3>
@@ -87,6 +108,7 @@
 <aside class="notes">
   <ol class="footnotes">
     <li>改名只按 field_id 认，同名的可能是别人。<a class="back" href="#main">↩</a></li>
+    <li>别名路径按批次保存，旧报表顺着链读到最新名。<a class="back" href="#main">↩</a></li>
   </ol>
 </aside>
 {% endblock %}

@@ -94,10 +94,32 @@
   </div>
 </section>
 
+<section class="doc-section">
+  <h2><span class="clause">4</span>经别名读取</h2>
+  {% if aliased %}
+  <table>
+    <caption>旧名沿别名链读到新列<sup class="fn">3</sup></caption>
+    <thead><tr><th>节点</th><th>引用</th><th>别名路径</th></tr></thead>
+    <tbody>
+      {% for item in aliased %}
+      <tr>
+        <td class="name">{{ item.consumer }}</td>
+        <td class="name">{{ item.ref }}</td>
+        <td class="name">{{ (item.alias_path or [])|join(' → ') }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">没有经别名的引用。</p>
+  {% endif %}
+</section>
+
 <aside class="notes">
   <ol class="footnotes">
     <li>深度按最短跳数算，同名节点只出现一次。<a class="back" href="#main">↩</a></li>
     <li>断链节点按直接受影响计入。<a class="back" href="#main">↩</a></li>
+    <li>别名路径来自本批次保存的改名链。<a class="back" href="#main">↩</a></li>
   </ol>
 </aside>
 {% endblock %}

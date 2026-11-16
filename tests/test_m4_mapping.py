@@ -89,6 +89,59 @@ def test_unsafe_alias_is_broken(run):
     assert ("dw.mv_order_stat", "dim_order.ord_no") in aliased
 
 
+def test_alias_path_saved_per_batch(run):
+    """别名路径按批次保存：经别名绑定的引用带着完整的改名链。"""
+    aliased = {(item["consumer"], item["ref"]): item
+               for item in run["resolution"]["aliased"]}
+    two_hops = aliased[("dw.mv_order_stat", "dim_order.ord_no")]
+    assert two_hops["alias_path"] == ["ord_no", "order_no", "order_code"]
+    assert two_hops["new_name"] == "order_code"
+    one_hop = aliased[("dw.mv_order_daily", "dim_order.order_no")]
+    assert one_hop["alias_path"] == ["order_no", "order_code"]
+    # 直接绑定与断链不携带路径
+    direct = [item for item in run["resolution"]["resolved"] if item["via"] == "direct"]
+    assert direct and all(item["alias_path"] == [] for item in direct)
+    assert all(item["alias_path"] == [] for item in run["resolution"]["broken"])
+
+
+def test_rename_chain_saved_per_batch(run):
+    """改名链逐跳入批次：区间、表、身份都与别名边同口径。"""
+    chain = run["rename_chain"]
+    assert [(hop["old_name"], hop["new_name"],
+             hop["from_version"], hop["to_version"]) for hop in chain] == [
+        ("ord_no", "order_no", "v2026_03", "v2026_06"),
+        ("order_no", "order_code", "v2026_06", "v2026_09"),
+    ]
+    assert all(hop["table"] == "dim_order" for hop in chain)
+    assert {hop["field_id"] for hop in chain} == {"1002"}
+    paths = rename.chain_paths(chain)
+    assert paths == [{
+        "table": "dim_order",
+        "path": ["ord_no", "order_no", "order_code"],
+        "from_version": "v2026_03",
+        "to_version": "v2026_09",
+    }]
+
+
+def test_chain_paths_multi_hop_and_cycle():
+    hops = [
+        {"table": "t", "old_name": "a", "new_name": "b",
+         "from_version": "v1", "to_version": "v2"},
+        {"table": "t", "old_name": "b", "new_name": "c",
+         "from_version": "v2", "to_version": "v3"},
+    ]
+    assert rename.chain_paths(hops) == [
+        {"table": "t", "path": ["a", "b", "c"],
+         "from_version": "v1", "to_version": "v3"},
+    ]
+    # 成环的跳没有起点，不拼进链；解析时由 ALIAS_CYCLE 兜底
+    cyclic = [
+        {"table": "t", "old_name": "x", "new_name": "y"},
+        {"table": "t", "old_name": "y", "new_name": "x"},
+    ]
+    assert rename.chain_paths(cyclic) == []
+
+
 def test_mapping_conflict_when_two_old_names_hit_one_new_name():
     diff = {"rows": [
         {"field_id": "1", "table": "dim_x", "old_name": "a", "new_name": "c",

@@ -5,6 +5,8 @@
 
 from __future__ import annotations
 
+import sqlite3
+
 from app import config, errors, manifest as manifest_mod, store
 from app.modules.m1_intake import service as intake
 from app.modules.m2_types import service as types
@@ -36,11 +38,10 @@ def _json_safe(resolution: dict) -> dict:
 
 
 def _edges(old_snapshot: dict, new_snapshot: dict, diff: dict,
-           base_snapshot: dict | None) -> dict:
+           base_snapshot: dict | None, base_diff: dict | None) -> dict:
     allowed = {row["field_id"] for row in diff["rows"] if row["bucket"] == "renamed"}
     graph = mapping.rename_edges(old_snapshot["fields"], new_snapshot["fields"], allowed)
-    if base_snapshot is not None:
-        base_diff = compat.diff_snapshots(base_snapshot, old_snapshot)
+    if base_snapshot is not None and base_diff is not None:
         allowed_base = {row["field_id"] for row in base_diff["rows"]
                         if row["bucket"] == "renamed"}
         graph = mapping.merge_edges(
@@ -49,6 +50,41 @@ def _edges(old_snapshot: dict, new_snapshot: dict, diff: dict,
                                  allowed_base),
         )
     return graph
+
+
+def _rename_chain(old_snapshot: dict, new_snapshot: dict, diff: dict,
+                  base_snapshot: dict | None, base_diff: dict | None) -> list[dict]:
+    """逐跳改名记录：哪个版本区间里、哪张表、从什么名改到什么名。
+
+    只收干净改名（与别名边同一口径），改名又换类型的跳不进链。
+    """
+    hops: list[dict] = []
+    if base_snapshot is not None and base_diff is not None:
+        hops.extend(
+            {
+                "table": row["table"],
+                "field_id": row["field_id"],
+                "old_name": row["old_name"],
+                "new_name": row["new_name"],
+                "from_version": base_snapshot["version_label"],
+                "to_version": old_snapshot["version_label"],
+            }
+            for row in base_diff["rows"] if row["bucket"] == "renamed"
+        )
+    hops.extend(
+        {
+            "table": row["table"],
+            "field_id": row["field_id"],
+            "old_name": row["old_name"],
+            "new_name": row["new_name"],
+            "from_version": old_snapshot["version_label"],
+            "to_version": new_snapshot["version_label"],
+        }
+        for row in diff["rows"] if row["bucket"] == "renamed"
+    )
+    hops.sort(key=lambda hop: (hop["table"].lower(), hop["from_version"],
+                               hop["old_name"].lower()))
+    return hops
 
 
 def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_NEW,
@@ -95,7 +131,11 @@ def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_N
 
     ref_counts = _ref_counts(refs["consumers"])
     diff = compat.diff_snapshots(old_snapshot, new_snapshot, ref_counts)
-    edges = _edges(old_snapshot, new_snapshot, diff, base_snapshot)
+    base_diff = (compat.diff_snapshots(base_snapshot, old_snapshot)
+                 if base_snapshot is not None else None)
+    edges = _edges(old_snapshot, new_snapshot, diff, base_snapshot, base_diff)
+    rename_chain = _rename_chain(old_snapshot, new_snapshot, diff,
+                                 base_snapshot, base_diff)
     resolution = mapping.resolve(refs["consumers"], old_snapshot["fields"],
                                  new_snapshot["fields"], edges)
     mapping_table = mapping.build_mapping(old_snapshot["fields"], new_snapshot["fields"], diff)
@@ -136,6 +176,7 @@ def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_N
         "counts": diff["counts"],
         "name_clashes": diff["name_clashes"],
         "mapping": mapping_table,
+        "rename_chain": rename_chain,
         "refs": {"source": refs["source"], "sha256": refs["sha256"],
                  "registered_at": refs["registered_at"], "ref_total": refs["ref_total"],
                  "consumers": refs["consumers"]},
@@ -150,7 +191,17 @@ def execute(old_file: str = config.DEFAULT_OLD, new_file: str = config.DEFAULT_N
         "reused": False,
     }
     run["summary"] = history.summary_of(run)
-    store.save_run(run)
+    try:
+        store.save_run(run)
+    except sqlite3.IntegrityError:
+        # 并发下同批键已被别的请求写入：复用那份结果，不新增行
+        existing = store.find_run_by_key(key)
+        if existing is None:
+            raise errors.Conflict("批次键冲突但未找到已存批次",
+                                  detail={"batch_key": key})
+        reused = dict(existing)
+        reused["reused"] = True
+        return reused
     return run
 
 

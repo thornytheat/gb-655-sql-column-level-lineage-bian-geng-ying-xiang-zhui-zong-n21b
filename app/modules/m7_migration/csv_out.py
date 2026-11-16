@@ -15,7 +15,8 @@ FIELD_HEADER = [
     "primary_reason", "bucket", "ref_count", "line_old", "line_new",
 ]
 
-REF_HEADER = ["consumer", "kind", "ref", "table", "column", "via", "field_id", "reason"]
+REF_HEADER = ["consumer", "kind", "ref", "table", "column", "via", "field_id",
+              "reason", "alias_path"]
 
 
 def _buffer() -> tuple[io.StringIO, "csv.writer"]:
@@ -55,10 +56,12 @@ def refs_csv(run: dict) -> str:
     writer.writerow(REF_HEADER)
     for item in resolution.get("resolved") or []:
         writer.writerow([item["consumer"], item["kind"], item["ref"], item["table"],
-                         item["column"], item["via"], str(item["field_id"] or ""), ""])
+                         item["column"], item["via"], str(item["field_id"] or ""), "",
+                         ">".join(item.get("alias_path") or [])])
     for item in resolution.get("broken") or []:
         writer.writerow([item["consumer"], item["kind"], item["ref"], item["table"],
-                         item["column"], item.get("via") or "broken", "", "REF_BROKEN"])
+                         item["column"], item.get("via") or "broken", "", "REF_BROKEN",
+                         ">".join(item.get("alias_path") or [])])
     return buffer.getvalue()
 
 

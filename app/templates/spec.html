@@ -5,11 +5,11 @@
   <h1>迁移单</h1>
   <p class="lede">条款 <span class="mono">{{ clauses|length }}</span>　破坏 <span class="mono">{{ ledger.counts.breaking or 0 }}</span>　断链 <span class="mono">{{ ledger.counts.refs_broken or 0 }}</span></p>
   <div class="actions">
-    <a class="btn" href="/api/export/spec.md">迁移单 MD</a>
-    <a class="btn ghost" href="/api/export/fields.csv">字段账 CSV</a>
-    <a class="btn ghost" href="/api/export/refs.csv">引用账 CSV</a>
-    <a class="btn ghost" href="/api/export/ledger.csv">账目 CSV</a>
-    <a class="btn ghost" href="/api/export/manifest.json">运行清单</a>
+    <a class="btn" href="/api/export/spec.md{{ run_qs }}">迁移单 MD</a>
+    <a class="btn ghost" href="/api/export/fields.csv{{ run_qs }}">字段账 CSV</a>
+    <a class="btn ghost" href="/api/export/refs.csv{{ run_qs }}">引用账 CSV</a>
+    <a class="btn ghost" href="/api/export/ledger.csv{{ run_qs }}">账目 CSV</a>
+    <a class="btn ghost" href="/api/export/manifest.json{{ run_qs }}">运行清单</a>
   </div>
 
   {% if empty %}
